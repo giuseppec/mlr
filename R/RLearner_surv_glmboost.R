@@ -4,24 +4,27 @@ makeRLearner.surv.glmboost = function() {
     cl = "surv.glmboost",
     package = c("!survival", "mboost"),
     par.set = makeParamSet(
-      makeDiscreteLearnerParam(id = "family", default = mboost::CoxPH(),
-        values = list(CoxPH = mboost::CoxPH(), Weibull = mboost::Weibull(),
-          Loglog = mboost::Loglog(), Lognormal = mboost::Lognormal(), Gehan = mboost::Gehan())),
+      makeDiscreteLearnerParam(id = "family", default = mboost::CoxPH(), values = list(CoxPH = mboost::CoxPH(), Weibull = mboost::Weibull(), Loglog = mboost::Loglog(), Lognormal = mboost::Lognormal())),
       makeIntegerLearnerParam(id = "mstop", default = 100L, lower = 1L),
       makeNumericLearnerParam(id = "nu", default = 0.1, lower = 0, upper = 1),
       makeLogicalLearnerParam(id = "center", default = FALSE),
+      makeDiscreteLearnerParam(id = "m", default = "mstop", values = c("mstop", "cv")),
       makeLogicalLearnerParam(id = "use.formula", default = TRUE, when = "both")
     ),
-    par.vals = list(family = mboost::CoxPH(), use.formula = TRUE),
+    par.vals = list(
+      family = mboost::CoxPH(),
+      m = "mstop",
+      use.formula = TRUE
+    ),
     properties = c("numerics", "factors", "ordered", "weights", "rcens"),
     name = "Gradient Boosting with Componentwise Linear Models",
     short.name = "glmboost",
-    note = "`family` has been set to `CoxPH()` by default."
+    note = "`family` has been set to `CoxPH()` by default. Maximum number of boosting iterations is set via `mstop`, the actual number used for prediction is controlled by `m`."
   )
 }
 
 #' @export
-trainLearner.surv.glmboost = function(.learner, .task, .subset, .weights = NULL, family, mstop, nu, use.formula, ...) {
+trainLearner.surv.glmboost = function(.learner, .task, .subset, .weights = NULL, family, mstop, nu, m, use.formula, ...) {
   ctrl = learnerArgsToControl(mboost::boost_control, mstop, nu)
   if (use.formula) {
     f = getTaskFormula(.task)
@@ -40,6 +43,10 @@ trainLearner.surv.glmboost = function(.learner, .task, .subset, .weights = NULL,
       mboost::glmboost(x = data$data, y = data$target, control = ctrl, weights = .weights, family = family, ...)
     }
     model = attachTrainingInfo(model, info)
+  }
+  
+  if (m == "cv") {
+    mboost::mstop(model) = mboost::mstop(mboost::cvrisk(model, papply = lapply))
   }
   model
 }
